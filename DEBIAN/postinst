@@ -1,7 +1,10 @@
 #!/bin/bash
 set -e
 
-echo "Installing Python dependencies for frappe-bench-health..."
-pip3 install --break-system-packages pymysql
+echo "Installing Python dependencies..."
+pip3 install --break-system-packages pymysql || {
+    echo "Failed to install pymysql. Please install manually with 'sudo pip3 install pymysql'"
+}
 
-exit 0
+chmod +x /usr/local/bin/frappe-bench-health
+echo "frappe-bench-health installed successfully!"
