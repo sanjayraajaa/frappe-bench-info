@@ -23,7 +23,7 @@ wget https://github.com/sanjayraajaa/frappe-bench-info/releases/download/v1.0.0/
 ### 2️⃣ Install the package
 
 ```bash
-sudo dpkg -i frappe-bench-info_1.0.deb
+sudo dpkg -i frappe-bench-info_1.0.0.deb
 sudo apt-get install -f   # Fix dependencies if required
 ```
 
