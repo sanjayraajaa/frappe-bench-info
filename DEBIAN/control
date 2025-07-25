@@ -1,4 +1,4 @@
-Package: frappe-bench-health
+Package: frappe-bench-info
 Version: 1.0.0
 Section: utils
 Priority: optional

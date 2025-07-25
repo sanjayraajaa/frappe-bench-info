@@ -15,7 +15,7 @@ import argparse
 from collections import defaultdict
 
 def get_args():
-    parser = argparse.ArgumentParser(description="Frappe Bench DB Health Check")
+    parser = argparse.ArgumentParser(description="Frappe Bench Info Check")
     parser.add_argument('--db_user', default='root', help='MariaDB username (default: root)')
     parser.add_argument('--db_password', required=True, help='MariaDB password')
     parser.add_argument('--db_host', default='localhost', help='MariaDB host (default: localhost)')

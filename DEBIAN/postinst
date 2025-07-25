@@ -6,5 +6,5 @@ pip3 install --break-system-packages pymysql || {
     echo "Failed to install pymysql. Please install manually with 'sudo pip3 install pymysql'"
 }
 
-chmod +x /usr/local/bin/frappe-bench-health
-echo "frappe-bench-health installed successfully!"
+chmod +x /usr/local/bin/frappe-bench-info
+echo "frappe-bench-info installed successfully!"
