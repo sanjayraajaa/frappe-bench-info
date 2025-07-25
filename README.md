@@ -23,7 +23,7 @@ wget https://github.com/sanjayraajaa/frappe-bench-info/releases/download/v1.0.0/
 ### 2️⃣ Install the package
 
 ```bash
-sudo dpkg -i frappe-bench-info.deb
+sudo dpkg -i frappe-bench-info_1.0.deb
 sudo apt-get install -f   # Fix dependencies if required
 ```
 
@@ -45,13 +45,13 @@ It requires:
 Run the tool with:
 
 ```bash
-frappe-bench-health --db_password <DB_PASSWORD> [--db_user root] [--db_host localhost] [--start_path /path/to/search]
+frappe-bench-info --db_password <DB_PASSWORD> [--db_user root] [--db_host localhost] [--start_path /path/to/search]
 ```
 
 ### Example
 
 ```bash
-frappe-bench-health --db_password 12345 --start_path /home/frappe
+frappe-bench-info --db_password 12345 --start_path /home/frappe
 ```
 
 ### Output
@@ -80,7 +80,7 @@ cd frappe-bench-info
 Run directly (without .deb):
 
 ```bash
-python3 usr/local/bin/frappe-bench-health --db_password <password> --start_path /home/frappe
+python3 usr/local/bin/frappe-bench-info --db_password <password> --start_path /home/frappe
 ```
 
 ---
