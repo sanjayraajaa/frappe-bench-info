@@ -1,0 +1,7 @@
+#!/bin/bash
+set -e
+
+echo "Installing Python dependencies for frappe-bench-health..."
+pip3 install --break-system-packages pymysql
+
+exit 0

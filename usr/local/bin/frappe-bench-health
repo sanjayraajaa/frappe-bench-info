@@ -1,8 +1,16 @@
 #!/usr/bin/env python3
 
+# Ensure PyMySQL is installed
+try:
+    import pymysql
+except ImportError:
+    import subprocess, sys
+    print("⚠️ PyMySQL not found, installing...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "--break-system-packages", "pymysql"])
+    import pymysql
+
 import os
 import json
-import pymysql
 import argparse
 from collections import defaultdict
 
@@ -11,7 +19,24 @@ def get_args():
     parser.add_argument('--db_user', default='root', help='MariaDB username (default: root)')
     parser.add_argument('--db_password', required=True, help='MariaDB password')
     parser.add_argument('--db_host', default='localhost', help='MariaDB host (default: localhost)')
+    parser.add_argument('--start_path', default='/', help='Path to start scanning (default: /)')
     return parser.parse_args()
+
+def is_frappe_bench(path):
+    return (
+        os.path.isfile(os.path.join(path, "Procfile")) and
+        os.path.isdir(os.path.join(path, "sites")) and
+        os.path.isdir(os.path.join(path, "apps", "frappe"))
+    )
+
+def find_all_benches(start_path="/"):
+    benches = []
+    for root, dirs, files in os.walk(start_path):
+        if is_frappe_bench(root):
+            benches.append(root)
+            # Skip deeper scanning inside this bench
+            dirs[:] = []
+    return benches
 
 def get_site_db_mapping(bench_path):
     site_db_map = {}
@@ -35,13 +60,10 @@ def get_site_db_mapping(bench_path):
                 print(f"Error reading {config_path}: {e}")
     return site_db_map
 
-def get_all_site_mappings(base_path):
+def get_all_site_mappings(benches):
     all_sites = {}
-    for item in os.listdir(base_path):
-        bench_path = os.path.join(base_path, item)
-        if os.path.isdir(bench_path):
-            sites = get_site_db_mapping(bench_path)
-            all_sites.update(sites)
+    for bench_path in benches:
+        all_sites.update(get_site_db_mapping(bench_path))
     return all_sites
 
 def get_db_sizes(db_user, db_password, db_host):
@@ -51,7 +73,6 @@ def get_db_sizes(db_user, db_password, db_host):
         password=db_password,
         database="information_schema"
     )
-
     with connection.cursor() as cursor:
         cursor.execute("""
             SELECT table_schema AS db_name,
@@ -63,9 +84,13 @@ def get_db_sizes(db_user, db_password, db_host):
 
 def main():
     args = get_args()
-    base_path = os.getcwd()
+    benches = find_all_benches(args.start_path)
+    if not benches:
+        print("No Frappe benches found.")
+        return
+
     db_sizes = get_db_sizes(args.db_user, args.db_password, args.db_host)
-    site_map = get_all_site_mappings(base_path)
+    site_map = get_all_site_mappings(benches)
     bench_totals = defaultdict(float)
 
     print(f"{'Site Name':<25} {'Bench':<20} {'DB Name':<30} {'DB Size (MB)':<15}")
@@ -78,7 +103,7 @@ def main():
         bench_totals[bench] += float(size)
         print(f"{site:<25} {bench:<20} {db:<30} {size:<15}")
 
-    print("\n📦 Total DB Size per Bench:")
+    print("\nTotal DB Size per Bench:")
     print("-" * 35)
     for bench, total in sorted(bench_totals.items(), key=lambda x: x[1], reverse=True):
         print(f"{bench:<20} {total:.2f} MB")

@@ -1,0 +1,9 @@
+Package: frappe-bench-health
+Version: 1.0.0
+Section: utils
+Priority: optional
+Architecture: all
+Maintainer: Sanjay Raja <thesanjayraja@gmail.com>
+Depends: python3, python3-pip
+Description: CLI tool to check DB sizes across Frappe benches
+ A simple Python tool to monitor database size for Frappe/ERPNext sites.
