@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+
+import os
+import json
+import pymysql
+import argparse
+from collections import defaultdict
+
+def get_args():
+    parser = argparse.ArgumentParser(description="Frappe Bench DB Health Check")
+    parser.add_argument('--db_user', default='root', help='MariaDB username (default: root)')
+    parser.add_argument('--db_password', required=True, help='MariaDB password')
+    parser.add_argument('--db_host', default='localhost', help='MariaDB host (default: localhost)')
+    return parser.parse_args()
+
+def get_site_db_mapping(bench_path):
+    site_db_map = {}
+    sites_path = os.path.join(bench_path, "sites")
+    if not os.path.isdir(sites_path):
+        return site_db_map
+
+    for site in os.listdir(sites_path):
+        config_path = os.path.join(sites_path, site, "site_config.json")
+        if os.path.isfile(config_path):
+            try:
+                with open(config_path) as f:
+                    config = json.load(f)
+                    db_name = config.get("db_name")
+                    if db_name:
+                        site_db_map[site] = {
+                            "db_name": db_name,
+                            "bench": os.path.basename(bench_path)
+                        }
+            except Exception as e:
+                print(f"Error reading {config_path}: {e}")
+    return site_db_map
+
+def get_all_site_mappings(base_path):
+    all_sites = {}
+    for item in os.listdir(base_path):
+        bench_path = os.path.join(base_path, item)
+        if os.path.isdir(bench_path):
+            sites = get_site_db_mapping(bench_path)
+            all_sites.update(sites)
+    return all_sites
+
+def get_db_sizes(db_user, db_password, db_host):
+    connection = pymysql.connect(
+        host=db_host,
+        user=db_user,
+        password=db_password,
+        database="information_schema"
+    )
+
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT table_schema AS db_name,
+                   ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) AS size_mb
+            FROM tables
+            GROUP BY table_schema
+        """)
+        return dict(cursor.fetchall())
+
+def main():
+    args = get_args()
+    base_path = os.getcwd()
+    db_sizes = get_db_sizes(args.db_user, args.db_password, args.db_host)
+    site_map = get_all_site_mappings(base_path)
+    bench_totals = defaultdict(float)
+
+    print(f"{'Site Name':<25} {'Bench':<20} {'DB Name':<30} {'DB Size (MB)':<15}")
+    print("-" * 95)
+
+    for site, info in site_map.items():
+        db = info["db_name"]
+        bench = info["bench"]
+        size = db_sizes.get(db, 0.0)
+        bench_totals[bench] += float(size)
+        print(f"{site:<25} {bench:<20} {db:<30} {size:<15}")
+
+    print("\n📦 Total DB Size per Bench:")
+    print("-" * 35)
+    for bench, total in sorted(bench_totals.items(), key=lambda x: x[1], reverse=True):
+        print(f"{bench:<20} {total:.2f} MB")
+
+if __name__ == "__main__":
+    main()
