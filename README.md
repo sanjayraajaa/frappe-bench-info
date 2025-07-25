@@ -17,7 +17,7 @@ It lists:
 ### 1️⃣ Download the `.deb` package (latest release)
 
 ```bash
-wget https://github.com/sanjayraajaa/frappe-bench-info/releases/download/v1.0.0/frappe-bench-info_1.0.deb
+wget https://github.com/sanjayraajaa/frappe-bench-info/releases/download/v1.0.0/frappe-bench-info_1.0.0.deb
 ```
 
 ### 2️⃣ Install the package
