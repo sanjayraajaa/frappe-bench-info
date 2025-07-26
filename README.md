@@ -1,14 +1,13 @@
 # 📦 frappe-bench-info
 
-A simple **CLI tool** to check the **database sizes of all Frappe/ERPNext sites** across multiple benches.
+A **CLI tool** that lists all **Frappe/ERPNext benches, sites, and database sizes** on a server or in development environments.
+It scans the specified path, detects all benches, and displays site details in a table.
+---
 
-It lists:
-
-✅ **Site Name**
-✅ **Bench Name**
-✅ **Database Name**
-✅ **Database Size (MB)**
-✅ **Total DB Size per Bench**
+## ✅ Features
+✔ Lists **Site Name, Bench Name, DB Name, DB Size (MB), Bench Path**  
+✔ Detects benches inside a given path  
+✔ Works without requiring Frappe to be running  
 
 ---
 
@@ -18,7 +17,7 @@ It lists:
 
 ```bash
 wget https://github.com/sanjayraajaa/frappe-bench-info/releases/download/v1.0.0/frappe-bench-info_1.0.0.deb
-```
+````
 
 ### 2️⃣ Install the package
 
@@ -29,14 +28,12 @@ sudo apt-get install -f   # Fix dependencies if required
 
 ---
 
-## 🛠 Dependencies
-
-The package automatically installs **PyMySQL** if not available.
-It requires:
+## 🛠 Requirements
 
 * Python 3
+* PyMySQL (`pip install pymysql`)
 * MariaDB/MySQL running
-* Permissions to access `information_schema`
+* User must have access to `information_schema`
 
 ---
 
@@ -45,25 +42,30 @@ It requires:
 Run the tool with:
 
 ```bash
-frappe-bench-info --db_password <DB_PASSWORD> [--db_user root] [--db_host localhost] [--start_path /path/to/search]
+frappe-bench-info --start_path /path/to/search [--db_user root] [--db_host localhost]
 ```
+
+You will be asked to **enter the MariaDB/MySQL password**.
+
+---
 
 ### Example
 
 ```bash
-frappe-bench-info --db_password 12345 --start_path /home/frappe
+frappe-bench-info --start_path /home/frappe
 ```
 
-### Output
+🔑 The script will prompt for the password.
+
+---
+
+### Example Output
 
 ```
-Site Name                 Bench                DB Name                        DB Size (MB)
------------------------------------------------------------------------------------------------
-dev.local                 frappe-bench         _05b9f72dad1c4928              43.20
-
-Total DB Size per Bench:
------------------------------------
-frappe-bench         43.20 MB
+Site Name                 Bench Name           DB Name                        DB Size (MB)    Bench Path
+---------------------------------------------------------------------------------------------------------------------
+dev.local                 frappe-bench         _05b9f72dad1c4928              43.20           /home/frappe/frappe-bench
+test.local                frappe-bench         _a83df921d72bcb39              22.50           /home/frappe/frappe-bench
 ```
 
 ---
@@ -77,10 +79,10 @@ git clone https://github.com/sanjayraajaa/frappe-bench-info.git
 cd frappe-bench-info
 ```
 
-Run directly (without .deb):
+Run directly (without installing):
 
 ```bash
-python3 usr/local/bin/frappe-bench-info --db_password <password> --start_path /home/frappe
+python3 usr/local/bin/frappe-bench-info --start_path /home/frappe
 ```
 
 ---
@@ -88,7 +90,3 @@ python3 usr/local/bin/frappe-bench-info --db_password <password> --start_path /h
 ## 📝 License
 
 MIT License © 2025 **Sanjay Raja S**
-
----
-
-Do you want me to **add usage examples with screenshots and a build/install guide for contributors** too?

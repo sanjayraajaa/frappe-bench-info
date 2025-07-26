@@ -5,22 +5,36 @@ try:
     import pymysql
 except ImportError:
     import subprocess, sys
-    print("⚠️ PyMySQL not found, installing...")
+    print("\033[33mPyMySQL not found, installing...\033[0m")  # Yellow
     subprocess.check_call([sys.executable, "-m", "pip", "install", "--break-system-packages", "pymysql"])
     import pymysql
 
 import os
 import json
 import argparse
-from collections import defaultdict
+import getpass
+import pymysql.err
+
+# ANSI color codes
+RED = "\033[91m"
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+BLUE = "\033[94m"
+RESET = "\033[0m"
 
 def get_args():
     parser = argparse.ArgumentParser(description="Frappe Bench Info Check")
     parser.add_argument('--db_user', default='root', help='MariaDB username (default: root)')
-    parser.add_argument('--db_password', required=True, help='MariaDB password')
     parser.add_argument('--db_host', default='localhost', help='MariaDB host (default: localhost)')
-    parser.add_argument('--start_path', default='/', help='Path to start scanning (default: /)')
-    return parser.parse_args()
+    parser.add_argument('--start_path', required=True, help='Path to start scanning (mandatory)')
+    args = parser.parse_args()
+
+    # Convert relative path to absolute
+    args.start_path = os.path.abspath(args.start_path)
+
+    # Secure password input
+    args.db_password = getpass.getpass("Enter MariaDB password: ")
+    return args
 
 def is_frappe_bench(path):
     return (
@@ -29,13 +43,12 @@ def is_frappe_bench(path):
         os.path.isdir(os.path.join(path, "apps", "frappe"))
     )
 
-def find_all_benches(start_path="/"):
+def find_all_benches(start_path):
     benches = []
     for root, dirs, files in os.walk(start_path):
         if is_frappe_bench(root):
             benches.append(root)
-            # Skip deeper scanning inside this bench
-            dirs[:] = []
+            dirs[:] = []  # stop going deeper inside this bench
     return benches
 
 def get_site_db_mapping(bench_path):
@@ -54,10 +67,11 @@ def get_site_db_mapping(bench_path):
                     if db_name:
                         site_db_map[site] = {
                             "db_name": db_name,
-                            "bench": os.path.basename(bench_path)
+                            "bench": os.path.basename(bench_path),
+                            "bench_path": bench_path
                         }
             except Exception as e:
-                print(f"Error reading {config_path}: {e}")
+                print(f"{YELLOW}Warning: Error reading {config_path}: {e}{RESET}")
     return site_db_map
 
 def get_all_site_mappings(benches):
@@ -67,12 +81,17 @@ def get_all_site_mappings(benches):
     return all_sites
 
 def get_db_sizes(db_user, db_password, db_host):
-    connection = pymysql.connect(
-        host=db_host,
-        user=db_user,
-        password=db_password,
-        database="information_schema"
-    )
+    try:
+        connection = pymysql.connect(
+            host=db_host,
+            user=db_user,
+            password=db_password,
+            database="information_schema"
+        )
+    except pymysql.err.OperationalError:
+        print(f"{RED}Error: Could not connect to MySQL. Check your username or password.{RESET}")
+        return {}
+
     with connection.cursor() as cursor:
         cursor.execute("""
             SELECT table_schema AS db_name,
@@ -86,27 +105,23 @@ def main():
     args = get_args()
     benches = find_all_benches(args.start_path)
     if not benches:
-        print("No Frappe benches found.")
+        print(f"{RED}No Frappe benches found in: {args.start_path}{RESET}")
         return
 
     db_sizes = get_db_sizes(args.db_user, args.db_password, args.db_host)
+    if not db_sizes:
+        return  # Stop execution if DB connection failed
+
+    print(f"{GREEN}Site Name{'':20} Bench Name{'':15} DB Name{'':25} DB Size (MB){'':5} Bench Path{RESET}")
+    print("-" * 150)
+
     site_map = get_all_site_mappings(benches)
-    bench_totals = defaultdict(float)
-
-    print(f"{'Site Name':<25} {'Bench':<20} {'DB Name':<30} {'DB Size (MB)':<15}")
-    print("-" * 95)
-
     for site, info in site_map.items():
         db = info["db_name"]
         bench = info["bench"]
+        bench_path = info["bench_path"]
         size = db_sizes.get(db, 0.0)
-        bench_totals[bench] += float(size)
-        print(f"{site:<25} {bench:<20} {db:<30} {size:<15}")
-
-    print("\nTotal DB Size per Bench:")
-    print("-" * 35)
-    for bench, total in sorted(bench_totals.items(), key=lambda x: x[1], reverse=True):
-        print(f"{bench:<20} {total:.2f} MB")
+        print(f"{BLUE}{site:<25} {bench:<20} {db:<30} {size:<15} {bench_path:<60}{RESET}")
 
 if __name__ == "__main__":
     main()
