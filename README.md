@@ -16,13 +16,13 @@ It scans the specified path, detects all benches, and displays site details in a
 ### 1️⃣ Download the `.deb` package (latest release)
 
 ```bash
-wget https://github.com/sanjayraajaa/frappe-bench-info/releases/download/v1.0.0/frappe-bench-info_1.0.0.deb
+wget https://github.com/sanjayraajaa/frappe-bench-info/releases/download/v1.1.0/frappe-bench-info_1.1.0.deb
 ````
 
 ### 2️⃣ Install the package
 
 ```bash
-sudo dpkg -i frappe-bench-info_1.0.0.deb
+sudo dpkg -i frappe-bench-info_1.1.0.deb
 sudo apt-get install -f   # Fix dependencies if required
 ```
 
