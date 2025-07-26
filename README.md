@@ -1,7 +1,8 @@
 # 📦 frappe-bench-info
 
-A **CLI tool** that lists all **Frappe/ERPNext benches, sites, and database sizes** on a server or in development environments.
-It scans the specified path, detects all benches, and displays site details in a table.
+A **simple CLI tool** to list all **Frappe/ERPNext benches, sites, and database sizes**.
+It scans a given path, detects benches, and shows site details in a table – **no Frappe setup required**.
+
 ---
 
 ## ✅ Features
