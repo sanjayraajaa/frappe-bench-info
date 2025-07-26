@@ -1,38 +1,32 @@
 #!/usr/bin/env python3
 
-# Ensure PyMySQL is installed
-try:
-    import pymysql
-except ImportError:
-    import subprocess, sys
-    print("\033[33mPyMySQL not found, installing...\033[0m")  # Yellow
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "--break-system-packages", "pymysql"])
-    import pymysql
+# Ensure dependencies are installed
+import subprocess, sys
 
-import os
-import json
-import argparse
-import getpass
-import pymysql.err
+for pkg in ["pymysql", "tabulate"]:
+    try:
+        __import__(pkg)
+    except ImportError:
+        print(f"\033[33m{pkg} not found, installing...\033[0m")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--break-system-packages", pkg])
 
-# ANSI color codes
-RED = "\033[91m"
+import pymysql
+from tabulate import tabulate
+import os, json, argparse, getpass, pymysql.err
+
+# ANSI Colors
+CYAN = "\033[96m"
 GREEN = "\033[92m"
 YELLOW = "\033[93m"
-BLUE = "\033[94m"
 RESET = "\033[0m"
 
 def get_args():
-    parser = argparse.ArgumentParser(description="Frappe Bench Info Check")
+    parser = argparse.ArgumentParser(description="Frappe Bench Info Tool")
     parser.add_argument('--db_user', default='root', help='MariaDB username (default: root)')
     parser.add_argument('--db_host', default='localhost', help='MariaDB host (default: localhost)')
     parser.add_argument('--start_path', required=True, help='Path to start scanning (mandatory)')
     args = parser.parse_args()
-
-    # Convert relative path to absolute
     args.start_path = os.path.abspath(args.start_path)
-
-    # Secure password input
     args.db_password = getpass.getpass("Enter MariaDB password: ")
     return args
 
@@ -48,7 +42,7 @@ def find_all_benches(start_path):
     for root, dirs, files in os.walk(start_path):
         if is_frappe_bench(root):
             benches.append(root)
-            dirs[:] = []  # stop going deeper inside this bench
+            dirs[:] = []  # Don't go deeper
     return benches
 
 def get_site_db_mapping(bench_path):
@@ -82,17 +76,17 @@ def get_all_site_mappings(benches):
 
 def get_db_sizes(db_user, db_password, db_host):
     try:
-        connection = pymysql.connect(
+        conn = pymysql.connect(
             host=db_host,
             user=db_user,
             password=db_password,
             database="information_schema"
         )
     except pymysql.err.OperationalError:
-        print(f"{RED}Error: Could not connect to MySQL. Check your username or password.{RESET}")
+        print(f"\033[91mError: Could not connect to MySQL. Check credentials.\033[0m")
         return {}
 
-    with connection.cursor() as cursor:
+    with conn.cursor() as cursor:
         cursor.execute("""
             SELECT table_schema AS db_name,
                    ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) AS size_mb
@@ -105,23 +99,44 @@ def main():
     args = get_args()
     benches = find_all_benches(args.start_path)
     if not benches:
-        print(f"{RED}No Frappe benches found in: {args.start_path}{RESET}")
+        print(f"\033[91mNo Frappe benches found in: {args.start_path}\033[0m")
         return
 
     db_sizes = get_db_sizes(args.db_user, args.db_password, args.db_host)
     if not db_sizes:
-        return  # Stop execution if DB connection failed
-
-    print(f"{GREEN}Site Name{'':20} Bench Name{'':15} DB Name{'':25} DB Size (MB){'':5} Bench Path{RESET}")
-    print("-" * 150)
+        return
 
     site_map = get_all_site_mappings(benches)
+
+    print("\n")
+    print("FRAPPE BENCH INFO TOOL")
+    print("══════════════════════")
+
+    table_data = []
     for site, info in site_map.items():
         db = info["db_name"]
         bench = info["bench"]
         bench_path = info["bench_path"]
         size = db_sizes.get(db, 0.0)
-        print(f"{BLUE}{site:<25} {bench:<20} {db:<30} {size:<15} {bench_path:<60}{RESET}")
+
+        # Add colors to each column
+        table_data.append([
+            CYAN + site + RESET,
+            GREEN + bench + RESET,
+            YELLOW + db + RESET,
+            f"{size:.2f}",
+            bench_path
+        ])
+
+    headers = [
+        CYAN + "Site Name" + RESET,
+        GREEN + "Bench Name" + RESET,
+        YELLOW + "DB Name" + RESET,
+        "DB Size (MB)",
+        "Bench Path"
+    ]
+
+    print(tabulate(table_data, headers=headers, tablefmt="grid"))
 
 if __name__ == "__main__":
     main()

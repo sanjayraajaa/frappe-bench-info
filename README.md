@@ -17,13 +17,13 @@ It scans a given path, detects benches, and shows site details in a table – **
 ### 1️⃣ Download the `.deb` package (latest release)
 
 ```bash
-wget https://github.com/sanjayraajaa/frappe-bench-info/releases/download/v1.1.0/frappe-bench-info_1.1.0.deb
+wget https://github.com/sanjayraajaa/frappe-bench-info/releases/download/v1.1.1/frappe-bench-info_1.1.1.deb
 ````
 
 ### 2️⃣ Install the package
 
 ```bash
-sudo dpkg -i frappe-bench-info_1.1.0.deb
+sudo dpkg -i frappe-bench-info_1.1.1.deb
 sudo apt-get install -f   # Fix dependencies if required
 ```
 
@@ -63,10 +63,13 @@ frappe-bench-info --start_path /home/frappe
 ### Example Output
 
 ```
-Site Name                 Bench Name           DB Name                        DB Size (MB)    Bench Path
----------------------------------------------------------------------------------------------------------------------
-dev.local                 frappe-bench         _05b9f72dad1c4928              43.20           /home/frappe/frappe-bench
-test.local                frappe-bench         _a83df921d72bcb39              22.50           /home/frappe/frappe-bench
+FRAPPE BENCH INFO TOOL
+══════════════════════
++------------------+--------------+-------------------+----------------+-------------------------------+
+| Site Name        | Bench Name   | DB Name           |   DB Size (MB) | Bench Path                    |
++==================+==============+===================+================+===============================+
+| dev.frappe.local | frappe-bench | _05b9f72dad1c4928 |           43.2 | /home/sanjayraja/frappe-bench |
++------------------+--------------+-------------------+----------------+-------------------------------+
 ```
 
 ---

@@ -2,8 +2,9 @@
 set -e
 
 echo "Installing Python dependencies..."
-pip3 install --break-system-packages pymysql || {
-    echo "Failed to install pymysql. Please install manually with 'sudo pip3 install pymysql'"
+pip3 install --break-system-packages pymysql tabulate || {
+    echo "Failed to install dependencies. Please install manually with:"
+    echo "  sudo pip3 install pymysql tabulate"
 }
 
 chmod +x /usr/local/bin/frappe-bench-info
