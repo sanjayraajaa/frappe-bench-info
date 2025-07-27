@@ -33,6 +33,7 @@ sudo apt-get install -f   # Fix dependencies if required
 
 * Python 3
 * PyMySQL (`pip install pymysql`)
+* tabulate (`pip install tabulate`)
 * MariaDB/MySQL running
 * User must have access to `information_schema`
 
