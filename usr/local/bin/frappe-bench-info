@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 
-# Ensure dependencies are installed
-import subprocess, sys
+import subprocess, sys, os, json, argparse, getpass
+import pymysql
+from tabulate import tabulate
+from concurrent.futures import ThreadPoolExecutor
 
+# Ensure dependencies are installed
 for pkg in ["pymysql", "tabulate"]:
     try:
         __import__(pkg)
@@ -10,40 +13,81 @@ for pkg in ["pymysql", "tabulate"]:
         print(f"\033[33m{pkg} not found, installing...\033[0m")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "--break-system-packages", pkg])
 
-import pymysql
-from tabulate import tabulate
-import os, json, argparse, getpass, pymysql.err
-
 # ANSI Colors
 CYAN = "\033[96m"
 GREEN = "\033[92m"
 YELLOW = "\033[93m"
 RESET = "\033[0m"
 
+
+def get_package_version(pkg_name="frappe-bench-info"):
+    """Read version from installed Debian package."""
+    try:
+        result = subprocess.run(
+            ["dpkg-query", "-W", "-f", "${Version}", pkg_name],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True
+        )
+        version = result.stdout.strip()
+        return version if version else "unknown"
+    except Exception:
+        return "unknown"
+
+
 def get_args():
     parser = argparse.ArgumentParser(description="Frappe Bench Info Tool")
     parser.add_argument('--db_user', default='root', help='MariaDB username (default: root)')
     parser.add_argument('--db_host', default='localhost', help='MariaDB host (default: localhost)')
-    parser.add_argument('--start_path', required=True, help='Path to start scanning (mandatory)')
+    parser.add_argument('--start_path', help='Path to start scanning (default: current directory)')
+    parser.add_argument('--version', action='store_true', help='Show version and exit')
+
     args = parser.parse_args()
-    args.start_path = os.path.abspath(args.start_path)
+
+    # Show version and exit
+    if args.version:
+        version = get_package_version("frappe-bench-info")  # Match your package name
+        print(f"frappe-bench-info v{version}")
+        sys.exit(0)
+
+    args.start_path = os.path.abspath(args.start_path or os.getcwd())
     args.db_password = getpass.getpass("Enter MariaDB password: ")
     return args
 
+
 def is_frappe_bench(path):
     return (
-        os.path.isfile(os.path.join(path, "Procfile")) and
-        os.path.isdir(os.path.join(path, "sites")) and
-        os.path.isdir(os.path.join(path, "apps", "frappe"))
+        os.path.exists(os.path.join(path, "Procfile")) and
+        os.path.exists(os.path.join(path, "sites")) and
+        os.path.exists(os.path.join(path, "apps", "frappe"))
     )
 
+
 def find_all_benches(start_path):
-    benches = []
-    for root, dirs, files in os.walk(start_path):
-        if is_frappe_bench(root):
-            benches.append(root)
-            dirs[:] = []  # Don't go deeper
-    return benches
+    """Faster bench finder: uses 'find' if available, else threaded scan."""
+    try:
+        result = subprocess.run(
+            ["find", start_path, "-maxdepth", "4", "-type", "f", "-name", "Procfile"],
+            stdout=subprocess.PIPE, text=True, check=True
+        )
+        benches = []
+        for line in result.stdout.strip().split("\n"):
+            if not line:
+                continue
+            bench_path = os.path.dirname(line)
+            if os.path.isdir(os.path.join(bench_path, "sites")) and \
+               os.path.isdir(os.path.join(bench_path, "apps", "frappe")):
+                benches.append(bench_path)
+        return benches
+    except Exception:
+        candidates = []
+        for root, dirs, files in os.walk(start_path):
+            if "Procfile" in files:
+                candidates.append(root)
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            results = executor.map(is_frappe_bench, candidates)
+
+        return [candidates[i] for i, ok in enumerate(results) if ok]
+
 
 def get_site_db_mapping(bench_path):
     site_db_map = {}
@@ -68,11 +112,13 @@ def get_site_db_mapping(bench_path):
                 print(f"{YELLOW}Warning: Error reading {config_path}: {e}{RESET}")
     return site_db_map
 
+
 def get_all_site_mappings(benches):
     all_sites = {}
     for bench_path in benches:
         all_sites.update(get_site_db_mapping(bench_path))
     return all_sites
+
 
 def get_db_sizes(db_user, db_password, db_host):
     try:
@@ -94,6 +140,7 @@ def get_db_sizes(db_user, db_password, db_host):
             GROUP BY table_schema
         """)
         return dict(cursor.fetchall())
+
 
 def main():
     args = get_args()
@@ -119,7 +166,6 @@ def main():
         bench_path = info["bench_path"]
         size = db_sizes.get(db, 0.0)
 
-        # Add colors to each column
         table_data.append([
             CYAN + site + RESET,
             GREEN + bench + RESET,
@@ -137,6 +183,7 @@ def main():
     ]
 
     print(tabulate(table_data, headers=headers, tablefmt="grid"))
+
 
 if __name__ == "__main__":
     main()
