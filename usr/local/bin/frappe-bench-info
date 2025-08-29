@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import subprocess, sys, os, json, argparse, getpass
+import subprocess, sys, os, json, argparse, getpass, hashlib, time
 import pymysql
 from tabulate import tabulate
 from concurrent.futures import ThreadPoolExecutor
@@ -19,9 +19,11 @@ GREEN = "\033[92m"
 YELLOW = "\033[93m"
 RESET = "\033[0m"
 
+CACHE_FILE = os.path.expanduser("~/.frappe_bench_info_cache.json")
+CACHE_TTL = 300  # 5 minutes
+
 
 def get_package_version(pkg_name="frappe-bench-info"):
-    """Read version from installed Debian package."""
     try:
         result = subprocess.run(
             ["dpkg-query", "-W", "-f", "${Version}", pkg_name],
@@ -34,17 +36,17 @@ def get_package_version(pkg_name="frappe-bench-info"):
 
 
 def get_args():
-    parser = argparse.ArgumentParser(description="Frappe Bench Info Tool")
+    parser = argparse.ArgumentParser(description="Frappe Bench Info Tool (Optimized)")
     parser.add_argument('--db_user', default='root', help='MariaDB username (default: root)')
     parser.add_argument('--db_host', default='localhost', help='MariaDB host (default: localhost)')
     parser.add_argument('--start_path', help='Path to start scanning (default: current directory)')
     parser.add_argument('--version', action='store_true', help='Show version and exit')
+    parser.add_argument('--refresh', action='store_true', help='Ignore cache and refresh results')
 
     args = parser.parse_args()
 
-    # Show version and exit
     if args.version:
-        version = get_package_version("frappe-bench-info")  # Match your package name
+        version = get_package_version("frappe-bench-info")
         print(f"frappe-bench-info v{version}")
         sys.exit(0)
 
@@ -89,27 +91,38 @@ def find_all_benches(start_path):
         return [candidates[i] for i, ok in enumerate(results) if ok]
 
 
+def load_site_config(site_path):
+    config_path = os.path.join(site_path, "site_config.json")
+    if os.path.isfile(config_path):
+        try:
+            with open(config_path) as f:
+                config = json.load(f)
+                return config.get("db_name")
+        except Exception as e:
+            print(f"{YELLOW}Warning: Error reading {config_path}: {e}{RESET}")
+    return None
+
+
 def get_site_db_mapping(bench_path):
     site_db_map = {}
     sites_path = os.path.join(bench_path, "sites")
     if not os.path.isdir(sites_path):
         return site_db_map
 
-    for site in os.listdir(sites_path):
-        config_path = os.path.join(sites_path, site, "site_config.json")
-        if os.path.isfile(config_path):
-            try:
-                with open(config_path) as f:
-                    config = json.load(f)
-                    db_name = config.get("db_name")
-                    if db_name:
-                        site_db_map[site] = {
-                            "db_name": db_name,
-                            "bench": os.path.basename(bench_path),
-                            "bench_path": bench_path
-                        }
-            except Exception as e:
-                print(f"{YELLOW}Warning: Error reading {config_path}: {e}{RESET}")
+    site_names = os.listdir(sites_path)
+    site_paths = [os.path.join(sites_path, s) for s in site_names]
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = executor.map(load_site_config, site_paths)
+
+    for site, db_name in zip(site_names, results):
+        if db_name:
+            site_db_map[site] = {
+                "db_name": db_name,
+                "bench": os.path.basename(bench_path),
+                "bench_path": bench_path
+            }
+
     return site_db_map
 
 
@@ -120,26 +133,59 @@ def get_all_site_mappings(benches):
     return all_sites
 
 
-def get_db_sizes(db_user, db_password, db_host):
+def get_db_sizes(db_user, db_password, db_host, db_names):
+    if not db_names:
+        return {}
+
     try:
         conn = pymysql.connect(
             host=db_host,
             user=db_user,
             password=db_password,
-            database="information_schema"
+            database="information_schema",
+            cursorclass=pymysql.cursors.DictCursor
         )
     except pymysql.err.OperationalError:
         print(f"\033[91mError: Could not connect to MySQL. Check credentials.\033[0m")
         return {}
 
+    placeholders = ",".join(["%s"] * len(db_names))
+    query = f"""
+        SELECT table_schema AS db_name,
+               ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) AS size_mb
+        FROM tables
+        WHERE table_schema IN ({placeholders})
+        GROUP BY table_schema
+    """
+
     with conn.cursor() as cursor:
-        cursor.execute("""
-            SELECT table_schema AS db_name,
-                   ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) AS size_mb
-            FROM tables
-            GROUP BY table_schema
-        """)
-        return dict(cursor.fetchall())
+        cursor.execute(query, tuple(db_names))
+        return {row["db_name"]: row["size_mb"] for row in cursor.fetchall()}
+
+
+def load_cache(key):
+    if not os.path.isfile(CACHE_FILE):
+        return None
+    try:
+        with open(CACHE_FILE) as f:
+            cache = json.load(f)
+        if cache["key"] == key and time.time() - cache["timestamp"] < CACHE_TTL:
+            return cache["data"]
+    except Exception:
+        return None
+    return None
+
+
+def save_cache(key, data):
+    try:
+        with open(CACHE_FILE, "w") as f:
+            json.dump({
+                "key": key,
+                "timestamp": time.time(),
+                "data": data
+            }, f)
+    except Exception:
+        pass
 
 
 def main():
@@ -149,11 +195,20 @@ def main():
         print(f"\033[91mNo Frappe benches found in: {args.start_path}\033[0m")
         return
 
-    db_sizes = get_db_sizes(args.db_user, args.db_password, args.db_host)
-    if not db_sizes:
-        return
-
     site_map = get_all_site_mappings(benches)
+    db_names = [info["db_name"] for info in site_map.values()]
+
+    # Cache key is based on db_host + user + site DB names hash
+    cache_key = hashlib.md5(
+        (args.db_host + args.db_user + ",".join(sorted(db_names))).encode()
+    ).hexdigest()
+
+    cached = None if args.refresh else load_cache(cache_key)
+    if cached:
+        db_sizes = cached
+    else:
+        db_sizes = get_db_sizes(args.db_user, args.db_password, args.db_host, db_names)
+        save_cache(cache_key, db_sizes)
 
     print("\n")
     print("FRAPPE BENCH INFO TOOL")
